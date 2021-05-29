@@ -8,12 +8,12 @@ import sys
 import emoji
 import re
 
-
+#Author: 2331751v, Rishi Vinod
 #  please put your credentials below - very important
-consumer_key = environ['API_KEY']
-consumer_secret =environ['API_SECRET_KEY']
-access_token =environ['ACCESS_TOKEN']
-access_token_secret = environ['ACCESS_TOKEN_SECRET']
+consumer_key = "36e4tp7hX3Eo0f9MeYbuD7zDT"
+consumer_secret ="a5dHFAjf7isTS38wsKLp5SiuiAME7606Wq9bTytdwX9ziHKWMI"
+access_token ="2364487399-luzcWbnu5hE7Nb14VemcP6ZAnT32G1Tr617bW5J"
+access_token_secret ="lOWmbTo2LbiUnevVLT7zuZ2yIK73fkO7Am8jEyvrj48ty"
 
 
 auth = tweepy.OAuthHandler(consumer_key, consumer_secret )
@@ -38,7 +38,6 @@ rt_count = 0
 # tweetcount = db.collection.count()
 # print ("number of tweets collected:", tweetcount)
 
-
 def strip_emoji(text):
     #  copied from web - don't remember the actual link
     new_text = re.sub(emoji.get_emoji_regexp(), r"", text)
@@ -48,6 +47,13 @@ def cleanList(text):
     #  copied from web - don't remember the actual link
     #remove emoji it works
     text = strip_emoji(text)
+    # Remove URLs
+    text = re.sub(r'(https|http)?:\/\/(\w|\.|\/|\?|\=|\&|\%)*\b', '', str(text), flags=re.MULTILINE)
+    # Remove new lines
+    text = re.sub(r'/\r?\n|\r/', '', str(text), flags=re.MULTILINE)
+    # Remove broken symbols
+    text = re.sub(r'&amp;', '', str(text), flags=re.MULTILINE)
+
     text.encode("ascii", errors="ignore").decode()
 
     return text
@@ -63,7 +69,10 @@ def processTweets(tweet):
     exactcoord =None
     place=None
     rt = False
-
+    is_image = False
+    is_vid = False
+    media_type =None
+    media_url = None
     quoted = False
 
     # print(t)
@@ -74,11 +83,17 @@ def processTweets(tweet):
         quoted = tweet['is_quote_status']
         tweet_id = tweet['id_str']  # The Tweet ID from Twitter in string format
         username = tweet['user']['screen_name']  # The username of the Tweet author
-        # followers = t['user']['followers_count']  # The number of followers the Tweet author has
+        verified = tweet['user']['verified']
         text = tweet['text']  # The entire body of the Tweet
+        entities = tweet['entities']
+        source = tweet['source']
+        geoenabled = tweet['user']['geo_enabled']
+        location = tweet['user']['location']
+        exactcoord = tweet['coordinates']
+
     except Exception as e:
         # if this happens, there is something wrong with JSON, so ignore this tweet
-        print(e)
+        print("exc",e)
         return None
 
     try:
@@ -103,8 +118,10 @@ def processTweets(tweet):
     except Exception as e:
         print(e)
     text = cleanList(text)
-    entities = tweet['entities']
-    # print(entities)
+
+    if "media" in entities:
+        media_url = entities["media"][0]["media_url"]
+        media_type = media_url[-4:]
     mentions =entities['user_mentions']
     mList = []
 
@@ -118,20 +135,16 @@ def processTweets(tweet):
     #     hashtags =''
     # else:
     #     hashtags = str(hashtags).strip('[]')
-    source = tweet['source']
 
-    exactcoord = tweet['coordinates']
+
     coordinates = None
     if(exactcoord):
-        # print(exactcoord)
         coordinates = exactcoord['coordinates']
-        # print(coordinates)
-    geoenabled = tweet['user']['geo_enabled']
-    location = tweet['user']['location']
+
+
 
 
     if ((geoenabled) and (text.startswith('RT') == False)):
-        # sys.exit() # (tweet['geo']):
         try:
             if(tweet['place']):
                 # print(tweet['place'])
@@ -143,21 +156,37 @@ def processTweets(tweet):
             print(e)
             print('error from place details - maybe AttributeError: ... NoneType ... object has no attribute ..full_name ...')
 
-    tweet1 = {'_id' : tweet_id, 'date': created, 'username': username,  'text' : text,  'geoenabled' : geoenabled,  'coordinates' : coordinates,  'location' : location,  'place_name' : place_name, 'place_country' : place_country, 'country_code': place_countrycode,  'place_coordinates' : place_coordinates, 'hashtags' : hList, 'mentions' : mList, 'source' : source, 'retweet' : rt, 'quoted' : quoted }
-    print("count:", counter)
-    # print("retweet count:", rt_count)
+    tweet1 = {'_id' : tweet_id, 'date': created, 'username': username,  'text' : text,  'geoenabled' : geoenabled,  'coordinates' : coordinates,  'location' : location,  'place_name' : place_name, 'place_country' : place_country, 'country_code': place_countrycode,  'place_coordinates' : place_coordinates, 'hashtags' : hList
+        , 'mentions' : mList, 'source' : source, 'retweet' : rt, 'quoted' : quoted,
+              'verified':verified,'media_type' : media_type, 'media_url':media_url}
+
     return tweet1
 
+def search_trends(api): ## Shows the 10 most recent trends on twitter in the UK
+    trends = api.trends_place(23424975)[0]["trends"]      # WOE ID for UK is 23424975
 
+    trend_keywords = []
+    for trend in trends:
+        trend_keywords.append(trend["name"])
+
+    print("Trending keywords:", trend_keywords, "\n")
+
+    return trend_keywords
 
 class StreamListener(tweepy.StreamListener):
   #This is a class provided by tweepy to access the Twitter Streaming API.
 
     global geoEnabled
     global geoDisabled
+
+
+    time_limit = 300
+
     def on_connect(self):
-        # Called initially to connect to the Streaming API
-        print("You are now connected to the streaming API.")
+
+      self.start_time = time.time()
+    # Called initially to connect to the Streaming API
+      print("You are now connected to the streaming API.")
 
 
 
@@ -167,34 +196,37 @@ class StreamListener(tweepy.StreamListener):
         return False
 
     def on_data(self, data):
-        #This is where each tweet is collected
-        # let us load the  json data
-        t = json.loads(data)
-        #  now let us process the tweet so that we will deal with cleaned and extracted JSON
-        tweet = processTweets(t)
-        print(tweet)
-        # now insert it
-        #  for this to work you need to start a local mongodb server
-        try:
-            collection.insert_one(tweet)
-        except Exception as e:
-            print(e)
-            # this means some Mongo db insertion error
+        if (time.time() - self.start_time) < self.time_limit:
+            #This is where each tweet is collected
+            # let us load the  json data
+            t = json.loads(data)
+            #  now let us process the tweet so that we will deal with cleaned and extracted JSON
+            tweet = processTweets(t)
+            print(tweet)
+
+            # now insert it
+            #  for this to work you need to start a local mongodb server
+            try:
+                collection.insert_one(tweet)
+            except Exception as e:
+                print("error",e)
+                # this means some Mongo db insertion error
+        else:
+            print("Time limit reached.")
 
 
 
 
 #Set up the listener. The 'wait_on_rate_limit=True' is needed to help with Twitter API rate limiting.
 
-# WORDS = ['manhattan' , 'new york city', 'statue of liberty']
-# LOCATIONS = [ -75,40,-72,42] # new york city
 Loc_UK = [-10.392627, 49.681847, 1.055039, 61.122019] # UK and Ireland
-Words_UK =["Boris", "Prime Minister", "Tories", "UK", "London", "England", "Manchester", "Sheffield", "York", "Southampton", \
- "Wales", "Cardiff", "Swansea" ,"Banff", "Bristol", "Oxford", "Birmingham" ,"Scotland", "Glasgow", "Edinburgh", "Dundee", "Aberdeen", "Highlands" \
-"Inverness", "Perth", "St Andrews", "Dumfries", "Ayr" \
-"Ireland", "Dublin", "Cork", "Limerick", "Galway", "Belfast"," Derry", "Armagh" \
-"BoJo", "Labour", "Liberal Democrats", "SNP", "Conservatives", "First Minister", "Surgeon", "Chancelor" \
-"Boris Johnson", "BoJo", "Keith Stramer"]
+# Words_UK =["Boris", "Prime Minister", "Tories", "UK", "London", "England", "Manchester", "Sheffield", "York", "Southampton", \
+#  "Wales", "Cardiff", "Swansea" ,"Banff", "Bristol", "Oxford", "Birmingham" ,"Scotland", "Glasgow", "Edinburgh", "Dundee", "Aberdeen", "Highlands" \
+# "Inverness", "Perth", "St Andrews", "Dumfries", "Ayr" \
+# "Ireland", "Dublin", "Cork", "Limerick", "Galway", "Belfast"," Derry", "Armagh" \
+# "BoJo", "Labour", "Liberal Democrats", "SNP", "Conservatives", "First Minister", "Surgeon", "Chancelor" \
+# "Boris Johnson", "BoJo", "Keith Stramer"]
+Words_UK = search_trends(api)
 
 print("Tracking: " + str(Words_UK))
 #  here we ste the listener object
@@ -222,7 +254,12 @@ while results:
 
     if (counter < 180 ):
         try:
-            results = api.search(geocode=geoTerm, count=100, lang="en", tweet_mode='extended', max_id=last_id) #, since_id = sinceID)
+            results = api.search(geocode=geoTerm, count=100, lang="en", tweet_mode='extended', max_id=last_id)
+            # media_files = set()
+            # for status in results:
+            #     media = status.entities.get('media', [])
+            # if (len(media) > 0):
+            #     media_files.add(media[0]['media_url'])
             print("results: ",results)
         except Exception as e:
             print(e)

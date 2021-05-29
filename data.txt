@@ -1,0 +1,1 @@
+{"tweets": 13917, "retweets": 10328, "quoted": 1733, "geoenabled": 3719, "exact coordinates": 106, "generic location": 9652, "redundant": 0, "Verified": 118, "Images": 2894}
