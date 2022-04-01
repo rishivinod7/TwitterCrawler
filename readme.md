@@ -1,4 +1,4 @@
-# Twitter Crawler - Web Science Assessment 2331751v
+# Twitter Crawler 
 
 
 
@@ -51,7 +51,7 @@ python "tweetClusters.py"
 
 ## Authors
 
-- **Rishi Vinod (2331751v)** 
+- **Rishi Vinod** 
 
 
 ## License
